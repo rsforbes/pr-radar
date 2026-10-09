@@ -45,7 +45,6 @@ Data flow: `App` polls -> `fetchRepos` (one GraphQL query per repo, in parallel)
 - No desktop notifications, tray icon or badge count.
 - No tests for `client.ts`, `config.ts` or the UI.
 - Missing or unauthenticated `gh` surfaces as a raw error string per repo.
-- README and `Cargo.toml` metadata are still Tauri template placeholders.
 
 ## Conventions
 
