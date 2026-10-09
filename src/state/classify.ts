@@ -44,14 +44,20 @@ function classifyAuthored(pr: PullRequest, me: string): Classified {
   if (pr.reviewDecision === "CHANGES_REQUESTED" && changes && !after(pr.lastCommitAt, changes.submittedAt))
     return make("action", "Changes requested");
 
-  const lastMine = pr.comments
-    .filter((c) => c.author?.login === me)
-    .map((c) => c.createdAt)
-    .sort()
-    .at(-1) ?? null;
-  const newComment = pr.comments.some(
-    (c) => c.author?.login !== me && after(c.createdAt, lastMine ?? pr.lastCommitAt),
-  );
+  // Anything of mine (comment, review, thread reply, push) counts as having caught up.
+  const lastMine =
+    [
+      ...pr.comments.filter((c) => c.author?.login === me).map((c) => c.createdAt),
+      ...pr.reviews.filter((r) => r.author?.login === me).map((r) => r.submittedAt),
+      ...pr.threads.flatMap((t) =>
+        t.comments.nodes.filter((c) => c.author?.login === me).map((c) => c.createdAt),
+      ),
+      pr.lastCommitAt,
+    ]
+      .filter((t): t is string => t !== null)
+      .sort()
+      .at(-1) ?? null;
+  const newComment = pr.comments.some((c) => c.author?.login !== me && after(c.createdAt, lastMine));
   if (newComment) return make("action", "New comment on your PR");
 
   if (pr.reviewDecision === "APPROVED") return make("ready", "Approved, ready to merge");

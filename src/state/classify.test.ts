@@ -59,6 +59,22 @@ describe("authored PRs", () => {
     const comments = [{ author: them, createdAt: "2026-01-02T00:00:00Z" }];
     expect(classify(pr({ comments }), ME)?.reason).toBe("New comment on your PR");
   });
+  it("clears a top-level comment once I reply in a review thread", () => {
+    const comments = [{ author: them, createdAt: "2026-01-02T00:00:00Z" }];
+    const reviews = [{ author: mine, state: "COMMENTED" as const, submittedAt: "2026-01-03T00:00:00Z" }];
+    expect(classify(pr({ comments, reviews }), ME)?.reason).not.toBe("New comment on your PR");
+  });
+  it("clears a top-level comment once I push a newer commit", () => {
+    const comments = [{ author: them, createdAt: "2026-01-02T00:00:00Z" }];
+    expect(classify(pr({ comments, lastCommitAt: "2026-01-03T00:00:00Z" }), ME)?.reason).not.toBe(
+      "New comment on your PR",
+    );
+  });
+  it("still flags a top-level comment that arrives after my last activity", () => {
+    const comments = [{ author: them, createdAt: "2026-01-05T00:00:00Z" }];
+    const reviews = [{ author: mine, state: "COMMENTED" as const, submittedAt: "2026-01-03T00:00:00Z" }];
+    expect(classify(pr({ comments, reviews }), ME)?.reason).toBe("New comment on your PR");
+  });
   it("treats own draft as waiting", () => {
     expect(classify(pr({ isDraft: true }), ME)).toMatchObject({ bucket: "waiting", reason: "Draft" });
   });
