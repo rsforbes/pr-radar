@@ -6,6 +6,8 @@
   --muted: #6e6e73;
   --card: #fff;
   --border: #d2d2d7;
+  --danger: #d70015;
+  --ok: #1a7f37;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -14,12 +16,19 @@
     --muted: #98989d;
     --card: #2c2c2e;
     --border: #3a3a3c;
+    --danger: #ff6961;
+    --ok: #30d158;
   }
 }
 body { margin: 0; }
-.app { max-width: 900px; margin: 0 auto; padding: 16px; }
-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-header h1 { font-size: 18px; margin: 0 auto 0 0; }
+.app { max-width: 1000px; margin: 0 auto; padding: 16px; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.brand { display: flex; flex-direction: column; margin-right: auto; }
+header h1 { font-size: 18px; margin: 0; white-space: nowrap; }
+.updated { font-size: 12px; white-space: nowrap; }
+.controls, .actions { display: flex; align-items: center; gap: 8px; }
+.controls select { max-width: 190px; text-overflow: ellipsis; }
+button, select { white-space: nowrap; }
 button, select, input {
   font: inherit; color: inherit; background: var(--card);
   border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
@@ -33,24 +42,34 @@ button { cursor: pointer; }
 .repos ul { list-style: none; margin: 0; padding: 0; }
 .repos li { display: flex; justify-content: space-between; padding: 4px 0; }
 .bucket h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 20px 0 8px; }
-.count { background: var(--border); border-radius: 10px; padding: 0 7px; margin-left: 4px; }
+.count { background: var(--border); border-radius: 10px; padding: 0 7px; margin-left: 4px; font-size: 12px; text-transform: none; letter-spacing: 0; }
 .bucket.action .count { background: #ff3b30; color: #fff; }
 .bucket.ready .count { background: #34c759; color: #fff; }
 .pr {
-  display: grid; grid-template-columns: 200px 1fr; gap: 2px 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
   background: var(--card); border: 1px solid var(--border); border-left-width: 4px;
-  border-radius: 8px; padding: 8px 12px; margin-bottom: 6px;
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 6px;
   text-decoration: none; color: inherit;
 }
+.pr-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.title { font-weight: 500; }
+.tag {
+  flex-shrink: 0; font-size: 12px; font-weight: 600; white-space: nowrap;
+  border-radius: 10px; padding: 2px 10px; background: var(--border); color: var(--muted);
+}
+.tag.action { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.tag.ready { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
 .pr:hover { border-color: #0a84ff; }
 .pr.action { border-left-color: #ff3b30; }
 .pr.ready { border-left-color: #34c759; }
-.pr.waiting { border-left-color: var(--border); }
+.pr.waiting { border-left-color: var(--border); opacity: 0.75; }
+.pr.waiting:hover { opacity: 1; }
 .repo-group h2 { font-size: 15px; margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
 .repo-group .action-count { background: #ff3b30; color: #fff; }
 .repo-sub h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 12px 0 6px 2px; }
-.reason { font-weight: 600; grid-row: span 2; align-self: center; }
 .meta { color: var(--muted); font-size: 12px; }
 h2[role="button"], h3[role="button"] { cursor: pointer; user-select: none; }
 h2[role="button"]:focus-visible, h3[role="button"]:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; border-radius: 4px; }
-.chevron { display: inline-block; width: 1em; margin-right: 2px; }
+.chevron { display: inline-block; width: 1.2em; margin-right: 2px; font-size: 14px; }
+h2[role="button"]:hover, h3[role="button"]:hover { color: inherit; }
+.repo-name .owner { opacity: 0.6; font-weight: 400; }

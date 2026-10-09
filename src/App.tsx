@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { listAccounts, type GhAccount } from "./github/accounts";
 import { fetchRepos, type RepoResult } from "./github/client";
@@ -15,9 +16,21 @@ const BUCKETS: { key: Bucket; title: string }[] = [
 
 function ago(iso: string) {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 60) return `${mins}m`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h`;
-  return `${Math.round(mins / 1440)}d`;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+  return `${Math.round(mins / 1440)}d ago`;
+}
+
+/** Repo name with the owner dimmed so the repo itself stands out. */
+function RepoName({ repo }: { repo: string }) {
+  const [owner, name] = repo.split("/");
+  return (
+    <span className="repo-name">
+      <span className="owner">{owner}/</span>
+      {name}
+    </span>
+  );
 }
 
 const BUCKET_ORDER: Record<Bucket, number> = { action: 0, ready: 1, waiting: 2 };
@@ -27,14 +40,17 @@ function PrRow({ item, showRepo }: { item: Classified; showRepo: boolean }) {
   const { pr, role, reason, bucket } = item;
   return (
     <a className={`pr ${bucket}`} href={pr.url} onClick={(e) => (e.preventDefault(), openUrl(pr.url))}>
-      <span className="reason">{reason}</span>
-      <span className="title">
-        {pr.title} <span className="muted">#{pr.number}</span>
-      </span>
-      <span className="meta">
-        {showRepo && `${pr.repo} · `}
-        {role} · {pr.author?.login} · {ago(pr.updatedAt)}
-      </span>
+      <div className="pr-main">
+        <span className="title">
+          {pr.title} <span className="muted">#{pr.number}</span>
+        </span>
+        <span className="meta">
+          {showRepo && <RepoName repo={pr.repo} />}
+          {showRepo && " · "}
+          {role === "author" ? "Your PR" : `Reviewing · by ${pr.author?.login ?? "unknown"}`} · updated {ago(pr.updatedAt)}
+        </span>
+      </div>
+      <span className={`tag ${bucket}`}>{reason}</span>
     </a>
   );
 }
@@ -129,44 +145,62 @@ export default function App() {
     [items, repoFilter],
   );
 
+  // Dock/app-icon badge: PRs needing action across all repos, ignoring the view filter.
+  const actionCount = useMemo(() => items.filter((i) => i.bucket === "action").length, [items]);
+  useEffect(() => {
+    getCurrentWindow()
+      .setBadgeCount(actionCount > 0 ? actionCount : undefined)
+      .catch(() => {});
+  }, [actionCount]);
+
   if (!config) return <main className="app">Loading…</main>;
 
   return (
     <main className="app">
       <header>
-        <h1>PR Radar</h1>
-        <select value={repoFilter} onChange={(e) => setRepoFilter(e.target.value)}>
-          <option value="">All repos</option>
-          {config.repos.map((r) => (
-            <option key={r}>{r}</option>
-          ))}
-        </select>
-        {accounts.length > 0 && (
-          <select
-            title="GitHub account"
-            value={config.account ?? accounts.find((a) => a.active)?.login ?? ""}
-            onChange={(e) => update({ ...config, account: e.target.value })}
-          >
-            {accounts.map((a) => (
-              <option key={a.login} value={a.login}>
-                @{a.login}
-              </option>
+        <div className="brand">
+          <h1>PR Radar</h1>
+          {updated && (
+            <span className="muted updated">
+              Updated {updated.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
+        <div className="controls">
+          <select title="Repo filter" value={repoFilter} onChange={(e) => setRepoFilter(e.target.value)}>
+            <option value="">All repos</option>
+            {config.repos.map((r) => (
+              <option key={r}>{r}</option>
             ))}
           </select>
-        )}
-        <select
-          title="Group by"
-          value={config.groupBy}
-          onChange={(e) => update({ ...config, groupBy: e.target.value as Config["groupBy"] })}
-        >
-          <option value="status">Group by status</option>
-          <option value="repo">Group by repo</option>
-        </select>
-        <button onClick={() => refresh(config.repos, config.account)} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
-        <button onClick={() => setShowRepos((s) => !s)}>Repos ({config.repos.length})</button>
-        {updated && <span className="muted">updated {updated.toLocaleTimeString()}</span>}
+          {accounts.length > 0 && (
+            <select
+              title="GitHub account"
+              value={config.account ?? accounts.find((a) => a.active)?.login ?? ""}
+              onChange={(e) => update({ ...config, account: e.target.value })}
+            >
+              {accounts.map((a) => (
+                <option key={a.login} value={a.login}>
+                  @{a.login}
+                </option>
+              ))}
+            </select>
+          )}
+          <select
+            title="Group by"
+            value={config.groupBy}
+            onChange={(e) => update({ ...config, groupBy: e.target.value as Config["groupBy"] })}
+          >
+            <option value="status">Group by status</option>
+            <option value="repo">Group by repo</option>
+          </select>
+        </div>
+        <div className="actions">
+          <button onClick={() => refresh(config.repos, config.account)} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+          <button onClick={() => setShowRepos((s) => !s)}>Repos ({config.repos.length})</button>
+        </div>
       </header>
 
       {showRepos && (
@@ -209,7 +243,7 @@ export default function App() {
             <section key={repo} className="repo-group">
               <h2 {...toggler(`repo:${repo}`)}>
                 {chevron(`repo:${repo}`)}
-                {repo} <span className="count">{rows.length}</span>
+                <RepoName repo={repo} /> <span className="count">{rows.length}</span>
                 {rows.some((r) => r.bucket === "action") && (
                   <span className="count action-count">
                     {rows.filter((r) => r.bucket === "action").length} need action
@@ -240,7 +274,7 @@ export default function App() {
                         {groups.length > 1 && (
                           <h3 {...toggler(subKey)}>
                             {chevron(subKey)}
-                            {repo} <span className="muted">{items.length}</span>
+                            <RepoName repo={repo} /> <span className="count">{items.length}</span>
                           </h3>
                         )}
                         {(groups.length === 1 || !isCollapsed(subKey)) &&

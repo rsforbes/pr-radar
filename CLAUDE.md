@@ -36,6 +36,7 @@ Data flow: `App` polls -> `fetchRepos` (one GraphQL query per repo, in parallel)
 - **`gh` is looked up in fixed paths** (`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`) because macOS GUI apps don't inherit the shell PATH.
 - **Config** is JSON in the Tauri app config dir (`config.json`), read and written via Rust commands.
 - **`classify.ts` is pure** (no I/O) and is where the product behavior lives. Authored PRs: draft, CI failing, unresolved threads, changes requested (cleared by a newer commit), new top-level comments from others (cleared by any later activity of mine: comment, review, thread reply or push), approved. Reviewed PRs: review or re-review requested, replies to your threads, new commits since your review, else waiting. PRs the user isn't involved in return `null`. Change it together with tests.
+- **Dock badge**: `App.tsx` sets the window badge count to the number of `action` PRs across all repos (ignores the repo filter). It needs the `core:window:allow-set-badge-count` permission in `src-tauri/capabilities/default.json`; capability changes need a full app restart, not just hot reload.
 - Links open in the system browser via `@tauri-apps/plugin-opener`.
 
 ## Known gaps
