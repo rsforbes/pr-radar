@@ -3,10 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Config {
   repos: string[]; // "owner/name"
   pollMinutes: number;
+  groupBy: "status" | "repo";
+  collapsed: string[]; // collapsed section keys, e.g. "status:action", "repo:owner/name"
   account: string | null; // gh login to use; null = gh's active account
 }
 
-const DEFAULT: Config = { repos: [], pollMinutes: 5, account: null };
+const DEFAULT: Config = { repos: [], pollMinutes: 5, groupBy: "status", collapsed: [], account: null };
 
 export async function loadConfig(): Promise<Config> {
   const raw = await invoke<string>("load_config");

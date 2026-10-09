@@ -43,8 +43,14 @@ button { cursor: pointer; }
   text-decoration: none; color: inherit;
 }
 .pr:hover { border-color: #0a84ff; }
-.bucket.action .pr { border-left-color: #ff3b30; }
-.bucket.ready .pr { border-left-color: #34c759; }
-.bucket.waiting .pr { border-left-color: var(--border); }
+.pr.action { border-left-color: #ff3b30; }
+.pr.ready { border-left-color: #34c759; }
+.pr.waiting { border-left-color: var(--border); }
+.repo-group h2 { font-size: 15px; margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.repo-group .action-count { background: #ff3b30; color: #fff; }
+.repo-sub h3 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 12px 0 6px 2px; }
 .reason { font-weight: 600; grid-row: span 2; align-self: center; }
 .meta { color: var(--muted); font-size: 12px; }
+h2[role="button"], h3[role="button"] { cursor: pointer; user-select: none; }
+h2[role="button"]:focus-visible, h3[role="button"]:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; border-radius: 4px; }
+.chevron { display: inline-block; width: 1em; margin-right: 2px; }

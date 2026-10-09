@@ -23,7 +23,7 @@ npm install
 npm run tauri dev
 ```
 
-Click **Repos**, add repos as `owner/name` or a GitHub URL, and the app fetches your PRs. It refreshes every 5 minutes, or on demand with **Refresh**.
+Use the **Group by** dropdown to organize PRs by status or by repo, and click a section heading to collapse it. Click **Repos**, add repos as `owner/name` or a GitHub URL, and the app fetches your PRs. It refreshes every 5 minutes, or on demand with **Refresh**.
 
 ## Scripts
 
@@ -40,10 +40,10 @@ Click **Repos**, add repos as `owner/name` or a GitHub URL, and the app fetches 
 Settings are stored as `config.json` in the app's config directory:
 
 ```json
-{ "repos": ["owner/name"], "pollMinutes": 5, "account": null }
+{ "repos": ["owner/name"], "pollMinutes": 5, "groupBy": "status", "collapsed": [], "account": null }
 ```
 
-`account` is the `gh` login to use (`null` means the active one) and is set from the header dropdown. `pollMinutes` has no UI yet, so edit the file to change the refresh interval.
+`groupBy` is `"status"` or `"repo"` and `collapsed` lists the sections you've collapsed; both are set from the UI. `account` is the `gh` login to use (`null` means the active one) and is set from the header dropdown. `pollMinutes` has no UI yet, so edit the file to change the refresh interval.
 
 ## Project layout
 

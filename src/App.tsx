@@ -20,6 +20,32 @@ function ago(iso: string) {
   return `${Math.round(mins / 1440)}d`;
 }
 
+const BUCKET_ORDER: Record<Bucket, number> = { action: 0, ready: 1, waiting: 2 };
+const byUpdated = (a: Classified, b: Classified) => b.pr.updatedAt.localeCompare(a.pr.updatedAt);
+
+function PrRow({ item, showRepo }: { item: Classified; showRepo: boolean }) {
+  const { pr, role, reason, bucket } = item;
+  return (
+    <a className={`pr ${bucket}`} href={pr.url} onClick={(e) => (e.preventDefault(), openUrl(pr.url))}>
+      <span className="reason">{reason}</span>
+      <span className="title">
+        {pr.title} <span className="muted">#{pr.number}</span>
+      </span>
+      <span className="meta">
+        {showRepo && `${pr.repo} · `}
+        {role} · {pr.author?.login} · {ago(pr.updatedAt)}
+      </span>
+    </a>
+  );
+}
+
+/** Split items into [repo, items] groups, keeping first-seen order. */
+function groupByRepo(items: Classified[]): [string, Classified[]][] {
+  const map = new Map<string, Classified[]>();
+  for (const i of items) map.set(i.pr.repo, [...(map.get(i.pr.repo) ?? []), i]);
+  return [...map];
+}
+
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null);
   const [items, setItems] = useState<Classified[]>([]);
@@ -71,6 +97,26 @@ export default function App() {
     await saveConfig(next);
   };
 
+  const isCollapsed = (key: string) => config?.collapsed.includes(key) ?? false;
+  const toggle = (key: string) => {
+    if (!config) return;
+    const collapsed = config.collapsed.includes(key)
+      ? config.collapsed.filter((k) => k !== key)
+      : [...config.collapsed, key];
+    update({ ...config, collapsed });
+  };
+  /** Heading props that make a section title a keyboard-accessible collapse toggle. */
+  const toggler = (key: string) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    "aria-expanded": !isCollapsed(key),
+    onClick: () => toggle(key),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") (e.preventDefault(), toggle(key));
+    },
+  });
+  const chevron = (key: string) => <span className="chevron">{isCollapsed(key) ? "▸" : "▾"}</span>;
+
   const addRepo = async () => {
     const repo = parseRepo(newRepo);
     if (!repo || !config || config.repos.includes(repo)) return;
@@ -108,6 +154,14 @@ export default function App() {
             ))}
           </select>
         )}
+        <select
+          title="Group by"
+          value={config.groupBy}
+          onChange={(e) => update({ ...config, groupBy: e.target.value as Config["groupBy"] })}
+        >
+          <option value="status">Group by status</option>
+          <option value="repo">Group by repo</option>
+        </select>
         <button onClick={() => refresh(config.repos, config.account)} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}
         </button>
@@ -150,30 +204,55 @@ export default function App() {
         </p>
       ))}
 
-      {BUCKETS.map(({ key, title }) => {
-        const rows = visible
-          .filter((i) => i.bucket === key)
-          .sort((a, b) => b.pr.updatedAt.localeCompare(a.pr.updatedAt));
-        if (rows.length === 0) return null;
-        return (
-          <section key={key} className={`bucket ${key}`}>
-            <h2>
-              {title} <span className="count">{rows.length}</span>
-            </h2>
-            {rows.map(({ pr, role, reason }) => (
-              <a key={pr.url} className="pr" href={pr.url} onClick={(e) => (e.preventDefault(), openUrl(pr.url))}>
-                <span className="reason">{reason}</span>
-                <span className="title">
-                  {pr.title} <span className="muted">#{pr.number}</span>
-                </span>
-                <span className="meta">
-                  {pr.repo} · {role} · {pr.author?.login} · {ago(pr.updatedAt)}
-                </span>
-              </a>
-            ))}
-          </section>
-        );
-      })}
+      {config.groupBy === "repo"
+        ? groupByRepo([...visible].sort((a, b) => a.pr.repo.localeCompare(b.pr.repo))).map(([repo, rows]) => (
+            <section key={repo} className="repo-group">
+              <h2 {...toggler(`repo:${repo}`)}>
+                {chevron(`repo:${repo}`)}
+                {repo} <span className="count">{rows.length}</span>
+                {rows.some((r) => r.bucket === "action") && (
+                  <span className="count action-count">
+                    {rows.filter((r) => r.bucket === "action").length} need action
+                  </span>
+                )}
+              </h2>
+              {!isCollapsed(`repo:${repo}`) &&
+                [...rows]
+                  .sort((a, b) => BUCKET_ORDER[a.bucket] - BUCKET_ORDER[b.bucket] || byUpdated(a, b))
+                  .map((item) => <PrRow key={item.pr.url} item={item} showRepo={false} />)}
+            </section>
+          ))
+        : BUCKETS.map(({ key, title }) => {
+            const rows = visible.filter((i) => i.bucket === key).sort(byUpdated);
+            if (rows.length === 0) return null;
+            const groups = groupByRepo(rows.sort((a, b) => a.pr.repo.localeCompare(b.pr.repo)));
+            return (
+              <section key={key} className={`bucket ${key}`}>
+                <h2 {...toggler(`status:${key}`)}>
+                  {chevron(`status:${key}`)}
+                  {title} <span className="count">{rows.length}</span>
+                </h2>
+                {!isCollapsed(`status:${key}`) &&
+                  groups.map(([repo, items]) => {
+                    const subKey = `status:${key}/${repo}`;
+                    return (
+                      <div key={repo} className="repo-sub">
+                        {groups.length > 1 && (
+                          <h3 {...toggler(subKey)}>
+                            {chevron(subKey)}
+                            {repo} <span className="muted">{items.length}</span>
+                          </h3>
+                        )}
+                        {(groups.length === 1 || !isCollapsed(subKey)) &&
+                          items.map((item) => (
+                            <PrRow key={item.pr.url} item={item} showRepo={groups.length === 1} />
+                          ))}
+                      </div>
+                    );
+                  })}
+              </section>
+            );
+          })}
     </main>
   );
 }
