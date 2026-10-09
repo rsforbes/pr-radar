@@ -14,7 +14,7 @@ Built with [Tauri](https://tauri.app/) v2, React and TypeScript.
 - [Rust toolchain](https://www.rust-lang.org/tools/install) and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS
 - [GitHub CLI](https://cli.github.com/) (`gh`), installed and logged in (`gh auth login`)
 
-PR Radar uses your existing `gh` login to query GitHub, so it never handles or stores a token.
+PR Radar uses your existing `gh` login to query GitHub, so it never stores a token. If you're logged in to several accounts, pick one from the account dropdown in the header; this doesn't change the active account in your terminal.
 
 ## Getting started
 
@@ -40,10 +40,10 @@ Click **Repos**, add repos as `owner/name` or a GitHub URL, and the app fetches 
 Settings are stored as `config.json` in the app's config directory:
 
 ```json
-{ "repos": ["owner/name"], "pollMinutes": 5 }
+{ "repos": ["owner/name"], "pollMinutes": 5, "account": null }
 ```
 
-`pollMinutes` has no UI yet, so edit the file to change the refresh interval.
+`account` is the `gh` login to use (`null` means the active one) and is set from the header dropdown. `pollMinutes` has no UI yet, so edit the file to change the refresh interval.
 
 ## Project layout
 

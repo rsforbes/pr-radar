@@ -18,7 +18,8 @@ The goal is a single glanceable view of "what do I need to do on PRs right now",
 ## Architecture
 
 ```
-src-tauri/src/lib.rs   Rust commands: gh_graphql, load_config, save_config
+src-tauri/src/lib.rs   Rust commands: gh_graphql, gh_accounts, load_config, save_config
+src/github/accounts.ts Lists logged-in gh accounts (gh_accounts command)
 src/github/client.ts   GraphQL query + fetchRepos(); maps raw nodes to PullRequest
 src/github/types.ts    PullRequest, Classified, Bucket and related types
 src/state/classify.ts  Pure logic: classify(pr, me) -> Classified | null
@@ -31,6 +32,7 @@ Data flow: `App` polls -> `fetchRepos` (one GraphQL query per repo, in parallel)
 ### Key decisions
 
 - **Auth goes through the `gh` CLI**, not tokens. Rust spawns `gh api graphql --input -` and returns the raw JSON. The app never stores credentials.
+- **Multiple `gh` accounts**: the header dropdown picks which logged-in account to use (`Config.account`, null = gh's active account). Rust fetches that account's token with `gh auth token --user` and passes it as `GH_TOKEN` for that request only; it never runs `gh auth switch`, so the user's CLI state is untouched.
 - **`gh` is looked up in fixed paths** (`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`) because macOS GUI apps don't inherit the shell PATH.
 - **Config** is JSON in the Tauri app config dir (`config.json`), read and written via Rust commands.
 - **`classify.ts` is pure** (no I/O) and is where the product behavior lives. Authored PRs: draft, CI failing, unresolved threads, changes requested (cleared by a newer commit), new comments, approved. Reviewed PRs: review or re-review requested, replies to your threads, new commits since your review, else waiting. PRs the user isn't involved in return `null`. Change it together with tests.
@@ -44,7 +46,7 @@ Data flow: `App` polls -> `fetchRepos` (one GraphQL query per repo, in parallel)
 - No UI for `pollMinutes` (edit the config file).
 - No desktop notifications, tray icon or badge count.
 - No tests for `client.ts`, `config.ts` or the UI.
-- Missing or unauthenticated `gh` surfaces as a raw error string per repo.
+- Missing or unauthenticated `gh` (or a saved account that has since been logged out) surfaces as a raw error string per repo.
 
 ## Conventions
 

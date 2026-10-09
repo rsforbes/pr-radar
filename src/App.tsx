@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { listAccounts, type GhAccount } from "./github/accounts";
 import { fetchRepos, type RepoResult } from "./github/client";
 import type { Bucket, Classified } from "./github/types";
 import { classify } from "./state/classify";
@@ -28,12 +29,14 @@ export default function App() {
   const [newRepo, setNewRepo] = useState("");
   const [showRepos, setShowRepos] = useState(false);
   const [updated, setUpdated] = useState<Date | null>(null);
+  const [accounts, setAccounts] = useState<GhAccount[]>([]);
 
   useEffect(() => {
     loadConfig().then(setConfig);
+    listAccounts().then(setAccounts).catch(() => setAccounts([]));
   }, []);
 
-  const refresh = useCallback(async (repos: string[]) => {
+  const refresh = useCallback(async (repos: string[], account: string | null) => {
     if (repos.length === 0) {
       setItems([]);
       setErrors([]);
@@ -41,7 +44,7 @@ export default function App() {
     }
     setLoading(true);
     try {
-      const { me, results } = await fetchRepos(repos);
+      const { me, results } = await fetchRepos(repos, account);
       const classified = results
         .flatMap((r) => r.prs)
         .map((pr) => classify(pr, me))
@@ -57,11 +60,11 @@ export default function App() {
   const repoKey = config?.repos.join(",");
   useEffect(() => {
     if (!config) return;
-    refresh(config.repos);
-    const id = setInterval(() => refresh(config.repos), config.pollMinutes * 60_000);
+    refresh(config.repos, config.account);
+    const id = setInterval(() => refresh(config.repos, config.account), config.pollMinutes * 60_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoKey, config?.pollMinutes, refresh]);
+  }, [repoKey, config?.pollMinutes, config?.account, refresh]);
 
   const update = async (next: Config) => {
     setConfig(next);
@@ -92,7 +95,20 @@ export default function App() {
             <option key={r}>{r}</option>
           ))}
         </select>
-        <button onClick={() => refresh(config.repos)} disabled={loading}>
+        {accounts.length > 0 && (
+          <select
+            title="GitHub account"
+            value={config.account ?? accounts.find((a) => a.active)?.login ?? ""}
+            onChange={(e) => update({ ...config, account: e.target.value })}
+          >
+            {accounts.map((a) => (
+              <option key={a.login} value={a.login}>
+                @{a.login}
+              </option>
+            ))}
+          </select>
+        )}
+        <button onClick={() => refresh(config.repos, config.account)} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}
         </button>
         <button onClick={() => setShowRepos((s) => !s)}>Repos ({config.repos.length})</button>

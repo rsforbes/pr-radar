@@ -21,9 +21,10 @@ query($owner: String!, $name: String!) {
   }
 }`;
 
-async function gql<T>(variables: Record<string, string>): Promise<T> {
+async function gql<T>(variables: Record<string, string>, account: string | null): Promise<T> {
   const raw = await invoke<string>("gh_graphql", {
     body: JSON.stringify({ query: REPO_QUERY, variables }),
+    account,
   });
   const json = JSON.parse(raw);
   if (json.errors?.length) throw new Error(json.errors[0].message);
@@ -60,7 +61,10 @@ export interface RepoResult {
 }
 
 /** Fetch open PRs for each repo ("owner/name") in parallel. */
-export async function fetchRepos(repos: string[]): Promise<{ me: string; results: RepoResult[] }> {
+export async function fetchRepos(
+  repos: string[],
+  account: string | null,
+): Promise<{ me: string; results: RepoResult[] }> {
   let me = "";
   const results = await Promise.all(
     repos.map(async (repo): Promise<RepoResult> => {
@@ -70,7 +74,7 @@ export async function fetchRepos(repos: string[]): Promise<{ me: string; results
           viewer: { login: string };
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           repository: { pullRequests: { nodes: any[] } } | null;
-        }>({ owner, name });
+        }>({ owner, name }, account);
         me = data.viewer.login;
         if (!data.repository) return { repo, prs: [], error: "Repo not found or no access" };
         return { repo, prs: data.repository.pullRequests.nodes.map((n) => toPr(repo, n)) };
