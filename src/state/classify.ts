@@ -81,7 +81,17 @@ function classifyReviewing(pr: PullRequest, me: string): Classified | null {
 
   if (requested) return make("action", myLast ? "Re-review requested" : "Review requested");
 
-  const replies = threadsAwaitingMe(pr, me, true);
+  // Approving counts as having seen every reply made before it.
+  const myApproval =
+    myReviews
+      .filter((r) => r.state === "APPROVED")
+      .map((r) => r.submittedAt as string)
+      .sort()
+      .at(-1) ?? null;
+  const replies = threadsAwaitingMe(pr, me, true).filter((t) => {
+    const lastAt = t.comments.nodes[t.comments.nodes.length - 1].createdAt;
+    return myApproval === null || after(lastAt, myApproval);
+  });
   if (replies.length > 0)
     return make("action", `${replies.length} repl${replies.length > 1 ? "ies" : "y"} to your comments`);
 

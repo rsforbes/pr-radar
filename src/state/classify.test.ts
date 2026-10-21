@@ -106,6 +106,21 @@ describe("reviewing PRs", () => {
     ];
     expect(classify(theirs({ threads }), ME)?.reason).toBe("1 reply to your comments");
   });
+  it("ignores replies to my thread made before I approved", () => {
+    const threads = [
+      {
+        isResolved: false,
+        comments: {
+          nodes: [
+            { author: mine, createdAt: "2026-01-02T00:00:00Z" },
+            { author: them, createdAt: "2026-01-03T00:00:00Z" },
+          ],
+        },
+      },
+    ];
+    const reviews = [{ author: mine, state: "APPROVED" as const, submittedAt: "2026-01-04T00:00:00Z" }];
+    expect(classify(theirs({ threads, reviews }), ME)?.bucket).toBe("waiting");
+  });
   it("flags new commits after my review", () => {
     const reviews = [{ author: mine, state: "COMMENTED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
     expect(classify(theirs({ reviews, lastCommitAt: "2026-01-03T00:00:00Z" }), ME)?.reason).toBe("New commits since your review");
