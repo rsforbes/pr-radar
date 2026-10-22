@@ -18,22 +18,25 @@ The goal is a single glanceable view of "what do I need to do on PRs right now",
 ## Architecture
 
 ```
-src-tauri/src/lib.rs   Rust commands: gh_graphql, gh_accounts, load_config, save_config
+src-tauri/src/lib.rs   Rust commands: gh_graphql, gh_accounts, az_rest, load_config, save_config
 src/github/accounts.ts Lists logged-in gh accounts (gh_accounts command)
 src/github/client.ts   GraphQL query + fetchRepos(); maps raw nodes to PullRequest
-src/github/types.ts    PullRequest, Classified, Bucket and related types
+src/github/types.ts    PullRequest, Classified, Bucket and related types (shared by GitHub and ADO)
+src/ado/repo.ts        ADO repo keys ("ado:org/project/repo"), parseAdoRepo() for URLs
+src/ado/client.ts      Azure DevOps REST via az_rest; maps votes/threads/iterations to PullRequest
 src/state/classify.ts  Pure logic: classify(pr, me) -> Classified | null
-src/store/config.ts    Config (repos, pollMinutes, groupBy, collapsed, account) load/save, parseRepo()
+src/store/config.ts    Config (repos, pollMinutes, groupBy, collapsed, account) load/save, parseRepo()/parseAnyRepo()
 src/App.tsx            UI, polling, repo filter, group-by status/repo, collapsible sections, repo management
 ```
 
-Data flow: `App` polls -> `fetchRepos` (one GraphQL query per repo, in parallel) -> `classify` each PR for the current user (`viewer.login`) -> render grouped by bucket, newest-updated first.
+Data flow: `App` polls -> `fetchRepos` (GitHub: one GraphQL query per repo, in parallel) and `fetchAdoRepos` (ADO) -> `classify` each PR for that repo's `RepoResult.me` -> render grouped by bucket, newest-updated first.
 
 ### Key decisions
 
 - **Auth goes through the `gh` CLI**, not tokens. Rust spawns `gh api graphql --input -` and returns the raw JSON. The app never stores credentials.
 - **Multiple `gh` accounts**: the header dropdown picks which logged-in account to use (`Config.account`, null = gh's active account). Rust fetches that account's token with `gh auth token --user` and passes it as `GH_TOKEN` for that request only; it never runs `gh auth switch`, so the user's CLI state is untouched.
-- **`gh` is looked up in fixed paths** (`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`) because macOS GUI apps don't inherit the shell PATH.
+- **Azure DevOps goes through the `az` CLI**, same idea as `gh`: repos are stored as `ado:org/project/repo` in `Config.repos`, and Rust's `az_rest` runs `az rest --resource <ADO> --url ...` (dev.azure.com URLs only). Needs `az login`; the account picker is GitHub-only. ADO votes have no timestamps, so reviews are dated from the "voted" system threads. Only PRs the user authored or is a listed reviewer on are fetched in detail (threads, iterations, CI) to keep `az` process counts down. Written without access to a live ADO org: verify against a real one.
+- **`gh` and `az` are looked up in fixed paths** (`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`) because macOS GUI apps don't inherit the shell PATH.
 - **Config** is JSON in the Tauri app config dir (`config.json`), read and written via Rust commands.
 - **`classify.ts` is pure** (no I/O) and is where the product behavior lives. Authored PRs: draft, CI failing, unresolved threads, changes requested (cleared by a newer commit), new top-level comments from others (cleared by any later activity of mine: comment, review, thread reply or push), approved. Reviewed PRs: review or re-review requested, replies to your threads, new commits since your review, else waiting. PRs the user isn't involved in return `null`. Change it together with tests.
 - **Dock badge**: `App.tsx` sets the window badge count to the number of `action` PRs across all repos (ignores the repo filter). It needs the `core:window:allow-set-badge-count` permission in `src-tauri/capabilities/default.json`; capability changes need a full app restart, not just hot reload.
@@ -41,7 +44,8 @@ Data flow: `App` polls -> `fetchRepos` (one GraphQL query per repo, in parallel)
 
 ## Known gaps
 
-- Review requests to **teams** are ignored (only individual `User` reviewers are read).
+- Review requests to **teams** are ignored (GitHub: only `User` reviewers; ADO: group reviewers skipped).
+- ADO: reviewers are only detected from the PR's reviewer list (not ad-hoc commenters), no paging beyond 50 PRs per repo, and each PR costs 2-4 `az` calls.
 - Query limits with no paging: 50 PRs per repo, 50 threads, last 30 comments, last 50 reviews.
 - One `gh` process per repo per refresh.
 - No UI for `pollMinutes` (edit the config file).

@@ -1,5 +1,6 @@
 export interface Actor {
-  login: string;
+  login: string; // identity used for matching against the viewer
+  name?: string; // display name, when login is not human-readable
 }
 
 export interface TimedComment {
@@ -19,7 +20,7 @@ export interface Review {
 }
 
 export interface PullRequest {
-  repo: string; // owner/name
+  repo: string; // owner/name, or "ado:org/project/repo"
   number: number;
   title: string;
   url: string;

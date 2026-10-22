@@ -56,17 +56,14 @@ function toPr(repo: string, n: any): PullRequest {
 
 export interface RepoResult {
   repo: string;
+  me: string; // viewer identity on the PR's host; "" when the fetch failed
   prs: PullRequest[];
   error?: string;
 }
 
 /** Fetch open PRs for each repo ("owner/name") in parallel. */
-export async function fetchRepos(
-  repos: string[],
-  account: string | null,
-): Promise<{ me: string; results: RepoResult[] }> {
-  let me = "";
-  const results = await Promise.all(
+export async function fetchRepos(repos: string[], account: string | null): Promise<RepoResult[]> {
+  return Promise.all(
     repos.map(async (repo): Promise<RepoResult> => {
       const [owner, name] = repo.split("/");
       try {
@@ -75,13 +72,12 @@ export async function fetchRepos(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           repository: { pullRequests: { nodes: any[] } } | null;
         }>({ owner, name }, account);
-        me = data.viewer.login;
-        if (!data.repository) return { repo, prs: [], error: "Repo not found or no access" };
-        return { repo, prs: data.repository.pullRequests.nodes.map((n) => toPr(repo, n)) };
+        const me = data.viewer.login;
+        if (!data.repository) return { repo, me, prs: [], error: "Repo not found or no access" };
+        return { repo, me, prs: data.repository.pullRequests.nodes.map((n) => toPr(repo, n)) };
       } catch (e) {
-        return { repo, prs: [], error: String(e) };
+        return { repo, me: "", prs: [], error: String(e) };
       }
     }),
   );
-  return { me, results };
 }
