@@ -34,7 +34,7 @@ function RepoName({ repo }: { repo: string }) {
 }
 
 const BUCKET_ORDER: Record<Bucket, number> = { action: 0, ready: 1, waiting: 2 };
-const byUpdated = (a: Classified, b: Classified) => b.pr.updatedAt.localeCompare(a.pr.updatedAt);
+const byNumber = (a: Classified, b: Classified) => b.pr.number - a.pr.number;
 
 function PrRow({ item, showRepo }: { item: Classified; showRepo: boolean }) {
   const { pr, role, reason, bucket } = item;
@@ -252,12 +252,12 @@ export default function App() {
               </h2>
               {!isCollapsed(`repo:${repo}`) &&
                 [...rows]
-                  .sort((a, b) => BUCKET_ORDER[a.bucket] - BUCKET_ORDER[b.bucket] || byUpdated(a, b))
+                  .sort((a, b) => BUCKET_ORDER[a.bucket] - BUCKET_ORDER[b.bucket] || byNumber(a, b))
                   .map((item) => <PrRow key={item.pr.url} item={item} showRepo={false} />)}
             </section>
           ))
         : BUCKETS.map(({ key, title }) => {
-            const rows = visible.filter((i) => i.bucket === key).sort(byUpdated);
+            const rows = visible.filter((i) => i.bucket === key).sort(byNumber);
             if (rows.length === 0) return null;
             const groups = groupByRepo(rows.sort((a, b) => a.pr.repo.localeCompare(b.pr.repo)));
             return (
