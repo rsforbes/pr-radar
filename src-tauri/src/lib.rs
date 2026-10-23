@@ -128,6 +128,12 @@ fn save_config(app: tauri::AppHandle, json: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![gh_graphql, gh_accounts, az_rest, load_config, save_config])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

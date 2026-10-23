@@ -7,6 +7,8 @@ import { isAdo, fromAdoKey, repoLabel } from "./ado/repo";
 import { fetchRepos, type RepoResult } from "./github/client";
 import type { Classified } from "./github/types";
 import { classify } from "./state/classify";
+import { checkForUpdate, installUpdate } from "./update";
+import type { Update } from "@tauri-apps/plugin-updater";
 import { isSnoozed, pruneSnoozed, snoozeUntil, timeLeft } from "./state/snooze";
 import { loadConfig, parseAnyRepo, saveConfig, type Config, type Tab } from "./store/config";
 import "./App.css";
@@ -102,6 +104,9 @@ export default function App() {
   const [showRepos, setShowRepos] = useState(false);
   const [updated, setUpdated] = useState<Date | null>(null);
   const [accounts, setAccounts] = useState<GhAccount[]>([]);
+  const [newVersion, setNewVersion] = useState<Update | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   // Tick so snoozes expire (and "wakes in" labels stay fresh) without waiting for a refresh.
@@ -113,6 +118,7 @@ export default function App() {
   useEffect(() => {
     loadConfig().then(setConfig);
     listAccounts().then(setAccounts).catch(() => setAccounts([]));
+    checkForUpdate().then(setNewVersion);
   }, []);
 
   const refresh = useCallback(async (repos: string[], account: string | null) => {
@@ -282,6 +288,28 @@ export default function App() {
           <button onClick={() => setShowRepos((s) => !s)}>Repos ({config.repos.length})</button>
         </div>
       </header>
+
+      {newVersion && (
+        <div className="update-banner">
+          <span>Version {newVersion.version} is available.</span>
+          <button
+            disabled={installing}
+            onClick={async () => {
+              setInstalling(true);
+              setUpdateError(null);
+              try {
+                await installUpdate(newVersion);
+              } catch (e) {
+                setUpdateError(String(e));
+                setInstalling(false);
+              }
+            }}
+          >
+            {installing ? "Installing…" : "Update and restart"}
+          </button>
+          {updateError && <span className="error">{updateError}</span>}
+        </div>
+      )}
 
       {showRepos && (
         <section className="repos">
