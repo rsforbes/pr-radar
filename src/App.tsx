@@ -5,18 +5,21 @@ import { listAccounts, type GhAccount } from "./github/accounts";
 import { fetchAdoRepos } from "./ado/client";
 import { isAdo, fromAdoKey, repoLabel } from "./ado/repo";
 import { fetchRepos, type RepoResult } from "./github/client";
-import type { Bucket, Classified } from "./github/types";
+import type { Classified } from "./github/types";
 import { classify } from "./state/classify";
-import { loadConfig, parseAnyRepo, saveConfig, type Config } from "./store/config";
+import { isSnoozed, pruneSnoozed, snoozeUntil, timeLeft } from "./state/snooze";
+import { loadConfig, parseAnyRepo, saveConfig, type Config, type Tab } from "./store/config";
 import "./App.css";
 
-const BUCKETS: { key: Bucket; label: string }[] = [
+const TABS: { key: Tab; label: string }[] = [
   { key: "action", label: "Needs action" },
   { key: "ready", label: "Ready to merge" },
   { key: "waiting", label: "Waiting" },
+  { key: "snoozed", label: "Snoozed" },
 ];
 
-const EMPTY: Record<Bucket, string> = {
+const EMPTY: Record<Tab, string> = {
+  snoozed: "Nothing is snoozed.",
   action: "All caught up. Nothing needs your action.",
   ready: "No PRs are ready to merge.",
   waiting: "Nothing is waiting on others.",
@@ -44,7 +47,14 @@ function RepoName({ repo }: { repo: string }) {
 
 const byNumber = (a: Classified, b: Classified) => b.pr.number - a.pr.number;
 
-function PrRow({ item, showRepo }: { item: Classified; showRepo: boolean }) {
+interface RowAction {
+  note?: string;
+  label: string;
+  title: string;
+  run: () => void;
+}
+
+function PrRow({ item, showRepo, action }: { item: Classified; showRepo: boolean; action?: RowAction }) {
   const { pr, role, reason, bucket } = item;
   return (
     <a className={`pr ${bucket}`} href={pr.url} onClick={(e) => (e.preventDefault(), openUrl(pr.url))}>
@@ -59,6 +69,17 @@ function PrRow({ item, showRepo }: { item: Classified; showRepo: boolean }) {
         </span>
       </div>
       <span className={`tag ${bucket}`}>{reason}</span>
+      {action?.note && <span className="meta note">{action.note}</span>}
+      {action && (
+        <button
+          className="row-action"
+          title={action.title}
+          aria-label={action.title}
+          onClick={(e) => (e.preventDefault(), e.stopPropagation(), action.run())}
+        >
+          {action.label}
+        </button>
+      )}
     </a>
   );
 }
@@ -81,6 +102,13 @@ export default function App() {
   const [showRepos, setShowRepos] = useState(false);
   const [updated, setUpdated] = useState<Date | null>(null);
   const [accounts, setAccounts] = useState<GhAccount[]>([]);
+  const [now, setNow] = useState(() => new Date());
+
+  // Tick so snoozes expire (and "wakes in" labels stay fresh) without waiting for a refresh.
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     loadConfig().then(setConfig);
@@ -160,17 +188,29 @@ export default function App() {
     [items, repoFilter],
   );
 
-  const counts = useMemo(
-    () => ({
-      action: visible.filter((i) => i.bucket === "action").length,
-      ready: visible.filter((i) => i.bucket === "ready").length,
-      waiting: visible.filter((i) => i.bucket === "waiting").length,
-    }),
-    [visible],
+  // Only PRs that need action can be snoozed; a snooze lapses on its own once the time is up.
+  const snoozed = config?.snoozed;
+  const tabOf = useCallback(
+    (i: Classified): Tab => (i.bucket === "action" && isSnoozed(snoozed ?? {}, i.pr.url, now) ? "snoozed" : i.bucket),
+    [snoozed, now],
   );
 
-  // Dock/app-icon badge: PRs needing action across all repos, ignoring the view filter.
-  const actionCount = useMemo(() => items.filter((i) => i.bucket === "action").length, [items]);
+  const counts = useMemo(() => {
+    const c: Record<Tab, number> = { action: 0, ready: 0, waiting: 0, snoozed: 0 };
+    for (const i of visible) c[tabOf(i)]++;
+    return c;
+  }, [visible, tabOf]);
+
+  // Drop expired snoozes from the saved config.
+  useEffect(() => {
+    if (!config) return;
+    const live = pruneSnoozed(config.snoozed, now);
+    if (live !== config.snoozed) update({ ...config, snoozed: live });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now]);
+
+  // Dock/app-icon badge: PRs needing action across all repos, ignoring the view filter. Snoozed ones don't count.
+  const actionCount = useMemo(() => items.filter((i) => tabOf(i) === "action").length, [items, tabOf]);
   useEffect(() => {
     getCurrentWindow()
       .setBadgeCount(actionCount > 0 ? actionCount : undefined)
@@ -179,7 +219,26 @@ export default function App() {
 
   if (!config) return <main className="app">Loading…</main>;
 
-  const rows = visible.filter((i) => i.bucket === config.tab).sort(byNumber);
+  const rows = visible.filter((i) => tabOf(i) === config.tab).sort(byNumber);
+  const snoozeAction = (item: Classified): RowAction | undefined => {
+    const url = item.pr.url;
+    if (config.tab === "action")
+      return {
+        label: "💤",
+        title: "Snooze for 1 day",
+        run: () => update({ ...config, snoozed: { ...config.snoozed, [url]: snoozeUntil(new Date()) } }),
+      };
+    if (config.tab === "snoozed")
+      return {
+        note: `wakes in ${timeLeft(config.snoozed[url], now)}`,
+        label: "Unsnooze",
+        title: "Move back to Needs action",
+        run: () => {
+          const { [url]: _removed, ...rest } = config.snoozed;
+          update({ ...config, snoozed: rest });
+        },
+      };
+  };
   const groups = groupByRepo(rows.sort((a, b) => a.pr.repo.localeCompare(b.pr.repo)));
 
   return (
@@ -261,7 +320,7 @@ export default function App() {
       ))}
 
       <nav className="tabs" role="tablist">
-        {BUCKETS.map(({ key, label }) => (
+        {TABS.map(({ key, label }) => (
           <button
             key={key}
             role="tab"
@@ -289,7 +348,9 @@ export default function App() {
                 </h3>
               )}
               {(groups.length === 1 || !isCollapsed(subKey)) &&
-                items.map((item) => <PrRow key={item.pr.url} item={item} showRepo={groups.length === 1} />)}
+                items.map((item) => (
+                  <PrRow key={item.pr.url} item={item} showRepo={groups.length === 1} action={snoozeAction(item)} />
+                ))}
             </div>
           );
         })}

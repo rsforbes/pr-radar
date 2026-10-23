@@ -25,7 +25,8 @@ src/github/types.ts    PullRequest, Classified, Bucket and related types (shared
 src/ado/repo.ts        ADO repo keys ("ado:org/project/repo"), parseAdoRepo() for URLs
 src/ado/client.ts      Azure DevOps REST via az_rest; maps votes/threads/iterations to PullRequest
 src/state/classify.ts  Pure logic: classify(pr, me) -> Classified | null
-src/store/config.ts    Config (repos, pollMinutes, tab, collapsed, account) load/save, parseRepo()/parseAnyRepo()
+src/state/snooze.ts    Pure snooze helpers (expiry, pruning, time left)
+src/store/config.ts    Config (repos, pollMinutes, tab, snoozed, collapsed, account) load/save, parseRepo()/parseAnyRepo()
 src/App.tsx            UI, polling, repo filter, status tabs with per-repo collapsible groups, repo management
 ```
 
@@ -39,7 +40,8 @@ Data flow: `App` polls -> `fetchRepos` (GitHub: one GraphQL query per repo, in p
 - **`gh` and `az` are looked up in fixed paths** (`/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`) because macOS GUI apps don't inherit the shell PATH.
 - **Config** is JSON in the Tauri app config dir (`config.json`), read and written via Rust commands.
 - **`classify.ts` is pure** (no I/O) and is where the product behavior lives. Authored PRs: draft, CI failing, unresolved threads (cleared only by a reply or resolving; pushes don't clear them), changes requested (cleared by a newer commit), both ignored for a reviewer who already reviewed and has been re-requested, new top-level comments from others (cleared by any later activity of mine: comment, review, thread reply or push), approved. Reviewed PRs: review or re-review requested, replies to your threads, new commits since your review, else waiting. PRs the user isn't involved in return `null`. Change it together with tests.
-- **Dock badge**: `App.tsx` sets the window badge count to the number of `action` PRs across all repos (ignores the repo filter). It needs the `core:window:allow-set-badge-count` permission in `src-tauri/capabilities/default.json`; capability changes need a full app restart, not just hot reload.
+- **Snooze**: a display layer over `classify`, which is unaware of it. `Config.snoozed` maps PR url -> end time; only `action` PRs can be snoozed (24h fixed). A snoozed PR shows in the Snoozed tab and is not counted in the badge; when the time passes it is simply classified normally again. A snooze never ends early because of new activity.
+- **Dock badge**: `App.tsx` sets the window badge count to the number of non-snoozed `action` PRs across all repos (ignores the repo filter). It needs the `core:window:allow-set-badge-count` permission in `src-tauri/capabilities/default.json`; capability changes need a full app restart, not just hot reload.
 - Links open in the system browser via `@tauri-apps/plugin-opener`.
 
 ## Known gaps

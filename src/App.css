@@ -56,7 +56,7 @@ button { cursor: pointer; }
   border-radius: 8px; padding: 10px 14px; margin-bottom: 6px;
   text-decoration: none; color: inherit;
 }
-.pr-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pr-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .title { font-weight: 500; }
 .tag {
   flex-shrink: 0; font-size: 12px; font-weight: 600; white-space: nowrap;
@@ -65,6 +65,12 @@ button { cursor: pointer; }
 .tag.action { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
 .tag.ready { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
 .pr:hover { border-color: #0a84ff; }
+.note { flex-shrink: 0; white-space: nowrap; }
+.row-action { flex-shrink: 0; font-size: 12px; line-height: 1; padding: 3px 5px; color: var(--muted); }
+.row-action:hover { color: inherit; border-color: #0a84ff; }
+/* Snooze is a secondary action: only show it on hover or keyboard focus. */
+.bucket.action .row-action { opacity: 0; }
+.bucket.action .pr:hover .row-action, .bucket.action .row-action:focus-visible { opacity: 1; }
 .pr.action { border-left-color: #ff3b30; }
 .pr.ready { border-left-color: #34c759; }
 .pr.waiting { border-left-color: var(--border); opacity: 0.75; }
