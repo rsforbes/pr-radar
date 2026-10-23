@@ -4,12 +4,12 @@ const after = (a: string | null, b: string | null) =>
   a !== null && b !== null && new Date(a).getTime() > new Date(b).getTime();
 
 /** Threads where the last comment is not mine and which are still open. */
-function threadsAwaitingMe(pr: PullRequest, me: string, startedByMe: boolean) {
+function threadsAwaitingMe(pr: PullRequest, me: string, startedByMe: boolean, skip: Set<string> = new Set()) {
   return pr.threads.filter((t) => {
     if (t.isResolved || t.comments.nodes.length === 0) return false;
     const first = t.comments.nodes[0].author?.login;
     const last = t.comments.nodes[t.comments.nodes.length - 1].author?.login;
-    if (last === me) return false;
+    if (last === me || (last && skip.has(last))) return false;
     return startedByMe ? first === me : true;
   });
 }
@@ -33,12 +33,16 @@ function classifyAuthored(pr: PullRequest, me: string): Classified {
   if (pr.isDraft) return make("waiting", "Draft");
   if (pr.ciState === "FAILURE" || pr.ciState === "ERROR") return make("action", "CI failing");
 
-  const open = threadsAwaitingMe(pr, me, false);
+  // Reviewers who already reviewed and have been asked again have the ball, even with threads still open.
+  const reReviewers = new Set(
+    pr.requestedReviewers.filter((u) => u !== me && pr.reviews.some((r) => r.author?.login === u)),
+  );
+  const open = threadsAwaitingMe(pr, me, false, reReviewers);
   if (open.length > 0)
     return make("action", `${open.length} unresolved comment thread${open.length > 1 ? "s" : ""}`);
 
   const changes = pr.reviews
-    .filter((r) => r.state === "CHANGES_REQUESTED" && r.author?.login !== me)
+    .filter((r) => r.state === "CHANGES_REQUESTED" && r.author?.login !== me && !reReviewers.has(r.author?.login ?? ""))
     .sort((a, b) => (a.submittedAt ?? "").localeCompare(b.submittedAt ?? ""))
     .at(-1);
   if (pr.reviewDecision === "CHANGES_REQUESTED" && changes && !after(pr.lastCommitAt, changes.submittedAt))

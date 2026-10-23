@@ -46,6 +46,27 @@ describe("authored PRs", () => {
     ];
     expect(classify(pr({ threads }), ME)?.bucket).toBe("waiting");
   });
+  it("hands an open thread back to a reviewer I re-requested", () => {
+    const threads = [{ isResolved: false, comments: { nodes: [{ author: them, createdAt: "2026-01-02T00:00:00Z" }] } }];
+    const reviews = [{ author: them, state: "COMMENTED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
+    expect(classify(pr({ threads, reviews, requestedReviewers: [them.login] }), ME)?.bucket).toBe("waiting");
+  });
+  it("keeps threads from other reviewers open when only one was re-requested", () => {
+    const other = { login: "other", name: null };
+    const threads = [
+      { isResolved: false, comments: { nodes: [{ author: them, createdAt: "2026-01-02T00:00:00Z" }] } },
+      { isResolved: false, comments: { nodes: [{ author: other, createdAt: "2026-01-02T00:00:00Z" }] } },
+    ];
+    const reviews = [{ author: them, state: "COMMENTED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
+    expect(classify(pr({ threads, reviews, requestedReviewers: [them.login] }), ME)).toMatchObject({
+      bucket: "action",
+      reason: "1 unresolved comment thread",
+    });
+  });
+  it("still flags open threads when the reviewer was never re-requested", () => {
+    const threads = [{ isResolved: false, comments: { nodes: [{ author: them, createdAt: "2026-01-02T00:00:00Z" }] } }];
+    expect(classify(pr({ threads, lastCommitAt: "2026-01-03T00:00:00Z" }), ME)?.bucket).toBe("action");
+  });
   it("flags changes requested until a newer commit", () => {
     const reviews = [{ author: them, state: "CHANGES_REQUESTED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
     const base = { reviewDecision: "CHANGES_REQUESTED" as const, reviews };
