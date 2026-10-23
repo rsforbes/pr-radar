@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { listAccounts, type GhAccount } from "./github/accounts";
+import { fetchAdoRepos } from "./ado/client";
+import { isAdo, fromAdoKey, repoLabel } from "./ado/repo";
 import { fetchRepos, type RepoResult } from "./github/client";
 import type { Bucket, Classified } from "./github/types";
 import { classify } from "./state/classify";
-import { loadConfig, parseRepo, saveConfig, type Config } from "./store/config";
+import { loadConfig, parseAnyRepo, saveConfig, type Config } from "./store/config";
 import "./App.css";
 
 const BUCKETS: { key: Bucket; title: string }[] = [
@@ -24,7 +26,8 @@ function ago(iso: string) {
 
 /** Repo name with the owner dimmed so the repo itself stands out. */
 function RepoName({ repo }: { repo: string }) {
-  const [owner, name] = repo.split("/");
+  const ado = isAdo(repo) ? fromAdoKey(repo) : null;
+  const [owner, name] = ado ? [`${ado.org}/${ado.project}`, ado.repo] : repo.split("/");
   return (
     <span className="repo-name">
       <span className="owner">{owner}/</span>
@@ -47,7 +50,7 @@ function PrRow({ item, showRepo }: { item: Classified; showRepo: boolean }) {
         <span className="meta">
           {showRepo && <RepoName repo={pr.repo} />}
           {showRepo && " · "}
-          {role === "author" ? "Your PR" : `Reviewing · by ${pr.author?.login ?? "unknown"}`} · updated {ago(pr.updatedAt)}
+          {role === "author" ? "Your PR" : `Reviewing · by ${pr.author?.name ?? pr.author?.login ?? "unknown"}`} · updated {ago(pr.updatedAt)}
         </span>
       </div>
       <span className={`tag ${bucket}`}>{reason}</span>
@@ -69,6 +72,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [repoFilter, setRepoFilter] = useState("");
   const [newRepo, setNewRepo] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
   const [showRepos, setShowRepos] = useState(false);
   const [updated, setUpdated] = useState<Date | null>(null);
   const [accounts, setAccounts] = useState<GhAccount[]>([]);
@@ -86,10 +90,13 @@ export default function App() {
     }
     setLoading(true);
     try {
-      const { me, results } = await fetchRepos(repos, account);
+      const [github, ado] = await Promise.all([
+        fetchRepos(repos.filter((r) => !isAdo(r)), account),
+        fetchAdoRepos(repos.filter(isAdo)),
+      ]);
+      const results = [...github, ...ado];
       const classified = results
-        .flatMap((r) => r.prs)
-        .map((pr) => classify(pr, me))
+        .flatMap((r) => r.prs.map((pr) => classify(pr, r.me)))
         .filter((c): c is Classified => c !== null);
       setItems(classified);
       setErrors(results.filter((r) => r.error));
@@ -134,8 +141,11 @@ export default function App() {
   const chevron = (key: string) => <span className="chevron">{isCollapsed(key) ? "▸" : "▾"}</span>;
 
   const addRepo = async () => {
-    const repo = parseRepo(newRepo);
-    if (!repo || !config || config.repos.includes(repo)) return;
+    if (!config) return;
+    const repo = parseAnyRepo(newRepo);
+    if (!repo) return setAddError("Not a recognised repo. Use owner/name, a github.com URL or an Azure DevOps repo URL.");
+    if (config.repos.includes(repo)) return setAddError(`${repo} is already added.`);
+    setAddError(null);
     setNewRepo("");
     await update({ ...config, repos: [...config.repos, repo] });
   };
@@ -170,7 +180,9 @@ export default function App() {
           <select title="Repo filter" value={repoFilter} onChange={(e) => setRepoFilter(e.target.value)}>
             <option value="">All repos</option>
             {config.repos.map((r) => (
-              <option key={r}>{r}</option>
+              <option key={r} value={r}>
+                {repoLabel(r)}
+              </option>
             ))}
           </select>
           {accounts.length > 0 && (
@@ -213,15 +225,16 @@ export default function App() {
           >
             <input
               value={newRepo}
-              onChange={(e) => setNewRepo(e.target.value)}
-              placeholder="owner/name or GitHub URL"
+              onChange={(e) => (setNewRepo(e.target.value), setAddError(null))}
+              placeholder="owner/name, GitHub URL or Azure DevOps repo URL"
             />
             <button type="submit">Add</button>
           </form>
+          {addError && <p className="error">{addError}</p>}
           <ul>
             {config.repos.map((r) => (
               <li key={r}>
-                {r}
+                {repoLabel(r)}
                 <button onClick={() => update({ ...config, repos: config.repos.filter((x) => x !== r) })}>
                   Remove
                 </button>
@@ -234,7 +247,7 @@ export default function App() {
       {config.repos.length === 0 && <p className="muted">No repos yet. Click “Repos” to add one.</p>}
       {errors.map((e) => (
         <p key={e.repo} className="error">
-          {e.repo}: {e.error}
+          {repoLabel(e.repo)}: {e.error}
         </p>
       ))}
 
