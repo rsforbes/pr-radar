@@ -1,21 +1,23 @@
 import { invoke } from "@tauri-apps/api/core";
 import { parseAdoRepo } from "../ado/repo";
+import type { Bucket } from "../github/types";
 
 export interface Config {
   repos: string[]; // "owner/name" (GitHub) or "ado:org/project/repo" (Azure DevOps)
   pollMinutes: number;
-  groupBy: "status" | "repo";
-  collapsed: string[]; // collapsed section keys, e.g. "status:action", "repo:owner/name"
+  tab: Bucket; // selected status tab
+  collapsed: string[]; // collapsed repo sub-group keys, e.g. "status:action/owner/name"
   account: string | null; // gh login to use; null = gh's active account
 }
 
-const DEFAULT: Config = { repos: [], pollMinutes: 5, groupBy: "status", collapsed: [], account: null };
+const DEFAULT: Config = { repos: [], pollMinutes: 5, tab: "action", collapsed: [], account: null };
 
 export async function loadConfig(): Promise<Config> {
   const raw = await invoke<string>("load_config");
   if (!raw) return DEFAULT;
   try {
-    return { ...DEFAULT, ...JSON.parse(raw) };
+    const { groupBy: _legacy, ...saved } = JSON.parse(raw); // groupBy was replaced by tabs
+    return { ...DEFAULT, ...saved };
   } catch {
     return DEFAULT;
   }

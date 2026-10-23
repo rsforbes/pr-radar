@@ -25,8 +25,8 @@ src/github/types.ts    PullRequest, Classified, Bucket and related types (shared
 src/ado/repo.ts        ADO repo keys ("ado:org/project/repo"), parseAdoRepo() for URLs
 src/ado/client.ts      Azure DevOps REST via az_rest; maps votes/threads/iterations to PullRequest
 src/state/classify.ts  Pure logic: classify(pr, me) -> Classified | null
-src/store/config.ts    Config (repos, pollMinutes, groupBy, collapsed, account) load/save, parseRepo()/parseAnyRepo()
-src/App.tsx            UI, polling, repo filter, group-by status/repo, collapsible sections, repo management
+src/store/config.ts    Config (repos, pollMinutes, tab, collapsed, account) load/save, parseRepo()/parseAnyRepo()
+src/App.tsx            UI, polling, repo filter, status tabs with per-repo collapsible groups, repo management
 ```
 
 Data flow: `App` polls -> `fetchRepos` (GitHub: one GraphQL query per repo, in parallel) and `fetchAdoRepos` (ADO) -> `classify` each PR for that repo's `RepoResult.me` -> render grouped by bucket, newest-updated first.

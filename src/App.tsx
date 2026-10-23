@@ -10,11 +10,17 @@ import { classify } from "./state/classify";
 import { loadConfig, parseAnyRepo, saveConfig, type Config } from "./store/config";
 import "./App.css";
 
-const BUCKETS: { key: Bucket; title: string }[] = [
-  { key: "action", title: "Needs your action" },
-  { key: "ready", title: "Ready to merge" },
-  { key: "waiting", title: "Waiting on others" },
+const BUCKETS: { key: Bucket; label: string }[] = [
+  { key: "action", label: "Needs action" },
+  { key: "ready", label: "Ready to merge" },
+  { key: "waiting", label: "Waiting" },
 ];
+
+const EMPTY: Record<Bucket, string> = {
+  action: "All caught up. Nothing needs your action.",
+  ready: "No PRs are ready to merge.",
+  waiting: "Nothing is waiting on others.",
+};
 
 function ago(iso: string) {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -36,7 +42,6 @@ function RepoName({ repo }: { repo: string }) {
   );
 }
 
-const BUCKET_ORDER: Record<Bucket, number> = { action: 0, ready: 1, waiting: 2 };
 const byNumber = (a: Classified, b: Classified) => b.pr.number - a.pr.number;
 
 function PrRow({ item, showRepo }: { item: Classified; showRepo: boolean }) {
@@ -155,6 +160,15 @@ export default function App() {
     [items, repoFilter],
   );
 
+  const counts = useMemo(
+    () => ({
+      action: visible.filter((i) => i.bucket === "action").length,
+      ready: visible.filter((i) => i.bucket === "ready").length,
+      waiting: visible.filter((i) => i.bucket === "waiting").length,
+    }),
+    [visible],
+  );
+
   // Dock/app-icon badge: PRs needing action across all repos, ignoring the view filter.
   const actionCount = useMemo(() => items.filter((i) => i.bucket === "action").length, [items]);
   useEffect(() => {
@@ -164,6 +178,9 @@ export default function App() {
   }, [actionCount]);
 
   if (!config) return <main className="app">Loading…</main>;
+
+  const rows = visible.filter((i) => i.bucket === config.tab).sort(byNumber);
+  const groups = groupByRepo(rows.sort((a, b) => a.pr.repo.localeCompare(b.pr.repo)));
 
   return (
     <main className="app">
@@ -198,14 +215,6 @@ export default function App() {
               ))}
             </select>
           )}
-          <select
-            title="Group by"
-            value={config.groupBy}
-            onChange={(e) => update({ ...config, groupBy: e.target.value as Config["groupBy"] })}
-          >
-            <option value="status">Group by status</option>
-            <option value="repo">Group by repo</option>
-          </select>
         </div>
         <div className="actions">
           <button onClick={() => refresh(config.repos, config.account)} disabled={loading}>
@@ -251,55 +260,40 @@ export default function App() {
         </p>
       ))}
 
-      {config.groupBy === "repo"
-        ? groupByRepo([...visible].sort((a, b) => a.pr.repo.localeCompare(b.pr.repo))).map(([repo, rows]) => (
-            <section key={repo} className="repo-group">
-              <h2 {...toggler(`repo:${repo}`)}>
-                {chevron(`repo:${repo}`)}
-                <RepoName repo={repo} /> <span className="count">{rows.length}</span>
-                {rows.some((r) => r.bucket === "action") && (
-                  <span className="count action-count">
-                    {rows.filter((r) => r.bucket === "action").length} need action
-                  </span>
-                )}
-              </h2>
-              {!isCollapsed(`repo:${repo}`) &&
-                [...rows]
-                  .sort((a, b) => BUCKET_ORDER[a.bucket] - BUCKET_ORDER[b.bucket] || byNumber(a, b))
-                  .map((item) => <PrRow key={item.pr.url} item={item} showRepo={false} />)}
-            </section>
-          ))
-        : BUCKETS.map(({ key, title }) => {
-            const rows = visible.filter((i) => i.bucket === key).sort(byNumber);
-            if (rows.length === 0) return null;
-            const groups = groupByRepo(rows.sort((a, b) => a.pr.repo.localeCompare(b.pr.repo)));
-            return (
-              <section key={key} className={`bucket ${key}`}>
-                <h2 {...toggler(`status:${key}`)}>
-                  {chevron(`status:${key}`)}
-                  {title} <span className="count">{rows.length}</span>
-                </h2>
-                {!isCollapsed(`status:${key}`) &&
-                  groups.map(([repo, items]) => {
-                    const subKey = `status:${key}/${repo}`;
-                    return (
-                      <div key={repo} className="repo-sub">
-                        {groups.length > 1 && (
-                          <h3 {...toggler(subKey)}>
-                            {chevron(subKey)}
-                            <RepoName repo={repo} /> <span className="count">{items.length}</span>
-                          </h3>
-                        )}
-                        {(groups.length === 1 || !isCollapsed(subKey)) &&
-                          items.map((item) => (
-                            <PrRow key={item.pr.url} item={item} showRepo={groups.length === 1} />
-                          ))}
-                      </div>
-                    );
-                  })}
-              </section>
-            );
-          })}
+      <nav className="tabs" role="tablist">
+        {BUCKETS.map(({ key, label }) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={config.tab === key}
+            className={`tab ${key}${config.tab === key ? " selected" : ""}`}
+            onClick={() => update({ ...config, tab: key })}
+          >
+            {label} <span className="count">{counts[key]}</span>
+          </button>
+        ))}
+      </nav>
+
+      {rows.length === 0 && config.repos.length > 0 && (
+        <p className="muted empty">{EMPTY[config.tab]}</p>
+      )}
+      <section className={`bucket ${config.tab}`}>
+        {groups.map(([repo, items]) => {
+          const subKey = `status:${config.tab}/${repo}`;
+          return (
+            <div key={repo} className="repo-sub">
+              {groups.length > 1 && (
+                <h3 {...toggler(subKey)}>
+                  {chevron(subKey)}
+                  <RepoName repo={repo} /> <span className="count">{items.length}</span>
+                </h3>
+              )}
+              {(groups.length === 1 || !isCollapsed(subKey)) &&
+                items.map((item) => <PrRow key={item.pr.url} item={item} showRepo={groups.length === 1} />)}
+            </div>
+          );
+        })}
+      </section>
     </main>
   );
 }
