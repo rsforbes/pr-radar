@@ -23,7 +23,7 @@ npm install
 npm run tauri dev
 ```
 
-Switch between the **Needs action**, **Ready to merge** and **Waiting** tabs (each shows a count), and click a repo heading within a tab to collapse it. Click **Repos**, add repos as `owner/name` or a GitHub URL, and the app fetches your PRs. It refreshes every 5 minutes, or on demand with **Refresh**.
+Switch between the **Needs action**, **Ready to merge**, **Waiting** and **Snoozed** tabs (each shows a count). Hover a PR in *Needs action* and click the 💤 button to move it to *Snoozed* for 24 hours; it returns to whichever tab it belongs in when the time is up, or sooner with **Unsnooze**, and click a repo heading within a tab to collapse it. Click **Repos**, add repos as `owner/name` or a GitHub URL, and the app fetches your PRs. It refreshes every 5 minutes, or on demand with **Refresh**.
 
 ## Scripts
 
@@ -40,10 +40,10 @@ Switch between the **Needs action**, **Ready to merge** and **Waiting** tabs (ea
 Settings are stored as `config.json` in the app's config directory:
 
 ```json
-{ "repos": ["owner/name"], "pollMinutes": 5, "tab": "action", "collapsed": [], "account": null }
+{ "repos": ["owner/name"], "pollMinutes": 5, "tab": "action", "snoozed": {}, "collapsed": [], "account": null }
 ```
 
-`tab` is the selected status tab (`"action"`, `"ready"` or `"waiting"`) and `collapsed` lists the repo groups you've collapsed; both are set from the UI. `account` is the `gh` login to use (`null` means the active one) and is set from the header dropdown. `pollMinutes` has no UI yet, so edit the file to change the refresh interval.
+`tab` is the selected tab (`"action"`, `"ready"`, `"waiting"` or `"snoozed"`), `snoozed` maps PR URLs to the time their snooze ends, and `collapsed` lists the repo groups you've collapsed; all three are set from the UI. `account` is the `gh` login to use (`null` means the active one) and is set from the header dropdown. `pollMinutes` has no UI yet, so edit the file to change the refresh interval.
 
 ## Azure DevOps
 
