@@ -45,6 +45,10 @@ Settings are stored as `config.json` in the app's config directory:
 
 `groupBy` is `"status"` or `"repo"` and `collapsed` lists the sections you've collapsed; both are set from the UI. `account` is the `gh` login to use (`null` means the active one) and is set from the header dropdown. `pollMinutes` has no UI yet, so edit the file to change the refresh interval.
 
+## Azure DevOps
+
+PR Radar can also track Azure DevOps repos. Install the [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/) (`az`), run `az login`, then add a repo from its URL, for example `https://dev.azure.com/{org}/{project}/_git/{repo}` or the older `https://{org}.visualstudio.com/{project}/_git/{repo}`. The account dropdown only applies to GitHub.
+
 ## Project layout
 
-See [CLAUDE.md](./CLAUDE.md) for the architecture, design decisions and known gaps.
+See [CLAUDE.md](./CLAUDE.md) for the module map, design decisions and known gaps, and [docs/architecture.md](./docs/architecture.md) for how the app runs, how to build a release, and what is macOS-specific.
