@@ -26,11 +26,7 @@ Nothing in the app stores credentials.
 
 `npm run tauri build` runs `npm run build`, compiles Rust in release mode and produces an installer for the platform it runs on. With `"targets": "all"` that is a `.app` and `.dmg` on macOS and `.msi` and NSIS `.exe` installers on Windows. The built app needs no Node or dev server. Config lives in the Tauri app config dir as `config.json`.
 
-Not set up yet:
-
-- Code signing and notarization. Unsigned macOS builds trigger Gatekeeper warnings and unsigned Windows installers trigger SmartScreen.
-- CI. A typical setup is a GitHub Actions matrix using `tauri-apps/tauri-action` on tagged releases.
-- Auto-update (the Tauri updater plugin).
+Releases are built by CI on a version tag and installed copies self-update; see [releasing.md](./releasing.md). Windows builds, and Apple code signing and notarization, are not set up yet.
 
 Each machine needs `gh` (and `az` for ADO) installed and logged in. Neither is bundled, by design.
 
