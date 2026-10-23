@@ -33,4 +33,24 @@ If the private key is lost, installed copies can no longer verify updates and ev
 ## Not set up yet
 
 - Windows builds (the app needs its Windows port first; see `docs/architecture.md`). The matrix has a commented-out Windows entry.
-- Apple code signing and notarization (needs a paid Apple Developer account).
+- Apple code signing and notarization (steps below).
+
+## Apple signing and notarization (to do)
+
+Without this, a fresh browser download shows "pr-radar is damaged and can't be opened". The workaround is `xattr -cr /Applications/pr-radar.app`. Signing and notarizing removes the need for it. Requires a paid Apple Developer account (the Account Holder role is needed to create the certificate).
+
+1. **Create a Developer ID Application certificate.** The Apple Development and Apple Distribution certificates do not work: they are for running on your own devices and for the App Store. In Xcode: Settings, Accounts, select the team, Manage Certificates, **+**, Developer ID Application. Or create it at developer.apple.com under Certificates.
+2. **Export it** from Keychain Access (right-click, Export) as a `.p12` with a password.
+3. **Encode it:** `base64 -i cert.p12 | pbcopy`
+4. **Create an app-specific password** at appleid.apple.com (Sign-In and Security, App-Specific Passwords). Notarization uses this, not the Apple ID password.
+5. **Add GitHub secrets** (Settings, Secrets and variables, Actions):
+   - `APPLE_CERTIFICATE`: the base64 text from step 3
+   - `APPLE_CERTIFICATE_PASSWORD`: the `.p12` password
+   - `APPLE_SIGNING_IDENTITY`: the full certificate name, e.g. `Developer ID Application: Your Name (TEAMID)`. List it with `security find-identity -v -p codesigning`.
+   - `APPLE_ID`: the Apple ID email
+   - `APPLE_PASSWORD`: the app-specific password
+   - `APPLE_TEAM_ID`: the 10-character Team ID
+6. **Pass them to the build:** add the six variables to the `env:` block of the `tauri-apps/tauri-action` step in `.github/workflows/release.yml`, each as `${{ secrets.NAME }}`. Add them only after the secrets exist, since empty values can make the build fail. `tauri-action` then imports the certificate, signs the app and submits it for notarization.
+7. Tag a new version and check the build log for the notarization step. Notarization adds a few minutes. Then download the `.dmg` and confirm it opens without the `xattr` workaround.
+
+The update signing key is separate and unaffected: updates keep verifying with `TAURI_SIGNING_PRIVATE_KEY`.
