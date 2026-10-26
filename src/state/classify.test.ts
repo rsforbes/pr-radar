@@ -146,6 +146,45 @@ describe("reviewing PRs", () => {
     const reviews = [{ author: mine, state: "COMMENTED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
     expect(classify(theirs({ reviews, lastCommitAt: "2026-01-03T00:00:00Z" }), ME)?.reason).toBe("New commits since your review");
   });
+  it("stays quiet on new commits after I approved", () => {
+    const reviews = [{ author: mine, state: "APPROVED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
+    expect(classify(theirs({ reviews, lastCommitAt: "2026-01-03T00:00:00Z" }), ME)).toMatchObject({
+      bucket: "waiting",
+      reason: "You approved",
+    });
+  });
+  it("stays quiet on replies to my threads after I approved", () => {
+    const threads = [
+      {
+        isResolved: false,
+        comments: {
+          nodes: [
+            { author: mine, createdAt: "2026-01-02T00:00:00Z" },
+            { author: them, createdAt: "2026-01-05T00:00:00Z" },
+          ],
+        },
+      },
+    ];
+    const reviews = [{ author: mine, state: "APPROVED" as const, submittedAt: "2026-01-03T00:00:00Z" }];
+    expect(classify(theirs({ threads, reviews }), ME)).toMatchObject({ bucket: "waiting", reason: "You approved" });
+  });
+  it("brings an approved PR back when I'm re-requested", () => {
+    const reviews = [{ author: mine, state: "APPROVED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
+    expect(
+      classify(theirs({ reviews, requestedReviewers: [ME], lastCommitAt: "2026-01-03T00:00:00Z" }), ME)?.reason,
+    ).toBe("Re-review requested");
+  });
+  it("still flags new commits when my approval was dismissed", () => {
+    const reviews = [{ author: mine, state: "DISMISSED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
+    expect(classify(theirs({ reviews, lastCommitAt: "2026-01-03T00:00:00Z" }), ME)?.reason).toBe("New commits since your review");
+  });
+  it("flags new commits when my last verdict was changes requested after an approval", () => {
+    const reviews = [
+      { author: mine, state: "APPROVED" as const, submittedAt: "2026-01-02T00:00:00Z" },
+      { author: mine, state: "CHANGES_REQUESTED" as const, submittedAt: "2026-01-03T00:00:00Z" },
+    ];
+    expect(classify(theirs({ reviews, lastCommitAt: "2026-01-04T00:00:00Z" }), ME)?.reason).toBe("New commits since your review");
+  });
   it("waits on author when nothing new", () => {
     const reviews = [{ author: mine, state: "COMMENTED" as const, submittedAt: "2026-01-02T00:00:00Z" }];
     expect(classify(theirs({ reviews }), ME)?.bucket).toBe("waiting");
