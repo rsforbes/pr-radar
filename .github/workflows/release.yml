@@ -1,16 +1,35 @@
 name: Release
 
-# Push a tag like v0.2.0 to build installers and publish a GitHub Release.
-# Needs the repo secrets TAURI_SIGNING_PRIVATE_KEY (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-# if the key has a password). See docs/releasing.md.
+# On every push to main, release-please keeps a "release PR" up to date from the Conventional
+# Commit messages. Merging that PR bumps the version files, writes CHANGELOG.md, tags the commit
+# and creates the GitHub Release; the build job below then attaches the installers and latest.json.
+# Needs the repo secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, and
+# Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests".
+# See docs/releasing.md.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  release:
-    permissions:
-      contents: write
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +44,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -43,15 +64,13 @@ jobs:
 
       - run: npm test
 
+      # The release already exists (created by release-please), so this only uploads the
+      # installers, the updater archives and latest.json to it.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "PR Radar ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download. Installed copies update themselves."
-          releaseDraft: false
-          prerelease: false
+          tagName: ${{ needs.release-please.outputs.tag_name }}
           args: ${{ matrix.args }}

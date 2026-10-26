@@ -1,6 +1,6 @@
 # Releasing
 
-Releases are built by `.github/workflows/release.yml` when a `v*` tag is pushed, and published as GitHub Releases. Installed copies check the latest release for updates at startup (`src/update.ts`) and show an "Update and restart" banner.
+Releases are automated with [release-please](https://github.com/googleapis/release-please) and `.github/workflows/release.yml`, and published as GitHub Releases. Installed copies check the latest release for updates at startup (`src/update.ts`) and show an "Update and restart" banner.
 
 ## One-time setup
 
@@ -12,17 +12,32 @@ Releases are built by `.github/workflows/release.yml` when a `v*` tag is pushed,
 2. Put the **public** key (the contents of `~/.tauri/pr-radar.key.pub`) in `src-tauri/tauri.conf.json` as `plugins.updater.pubkey`.
 3. In the GitHub repo settings, add the secrets `TAURI_SIGNING_PRIVATE_KEY` (the contents of the private key file) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (if you set a password).
 4. The repo must be **public**: installed apps fetch `latest.json` and the installers over plain HTTPS with no login.
+5. In Settings, Actions, General, enable **Allow GitHub Actions to create and approve pull requests**. release-please can't open its release PR without it.
+6. Recommended, in Settings, General, Pull Requests: allow squash merging, set "Default commit message" to **Pull request title and description** (so the PR title becomes the commit message), and turn off merge commits.
 
 If the private key is lost, installed copies can no longer verify updates and everyone has to reinstall by hand.
 
+## Commit messages
+
+release-please decides the next version from [Conventional Commits](https://www.conventionalcommits.org/). PRs are squash-merged, so the **PR title** is what counts, and `.github/workflows/pr-title.yml` fails a PR whose title isn't in this form:
+
+| Title prefix | Effect (while below 1.0) | Appears in changelog |
+| --- | --- | --- |
+| `feat: ...` | minor bump (0.1.2 to 0.2.0) | yes |
+| `fix: ...` | patch bump (0.1.2 to 0.1.3) | yes |
+| `feat!: ...` or a `BREAKING CHANGE:` footer | minor bump (major after 1.0) | yes |
+| `docs:`, `chore:`, `ci:`, `refactor:`, `test:` | no release on their own | no |
+
 ## Cutting a release
 
-1. Bump `version` in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` (keep them equal; the updater compares against `tauri.conf.json`).
-2. Commit, then tag and push:
-   ```sh
-   git tag v0.2.0 && git push origin v0.2.0
-   ```
-3. The workflow runs the tests, builds macOS (Apple Silicon and Intel) installers and uploads them with `latest.json` to the release.
+1. Merge PRs to `main` as usual. After each push, release-please opens or updates a PR titled "chore(main): release X.Y.Z" containing the version bump (`package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`) and the `CHANGELOG.md` entry.
+2. When you want to ship, review and **merge that release PR**. That is the whole manual step.
+3. The same workflow then tags the commit, creates the GitHub Release (with the changelog as its notes), and the build job attaches the macOS (Apple Silicon and Intel) installers, the updater archives and `latest.json`.
+4. Installed copies pick it up on their next start.
+
+If the build job fails, the tag and (empty) release already exist. Fix the problem, then re-run the failed workflow run from the Actions tab. Don't retag.
+
+The CI workflow (`.github/workflows/ci.yml`) runs `tsc` and the tests on every PR. Note that the release PR itself is opened by a bot token, so GitHub doesn't start CI on it. The build job runs the tests again before building.
 
 ## Installing
 
