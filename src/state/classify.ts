@@ -85,6 +85,14 @@ function classifyReviewing(pr: PullRequest, me: string): Classified | null {
 
   if (requested) return make("action", myLast ? "Re-review requested" : "Review requested");
 
+  // An approval stands, through later pushes and replies alike, until I'm asked to review again
+  // (re-requested above) or the approval is dismissed or replaced.
+  const myVerdict = myReviews
+    .filter((r) => r.state !== "COMMENTED" && r.state !== "PENDING")
+    .sort((a, b) => (a.submittedAt as string).localeCompare(b.submittedAt as string))
+    .at(-1);
+  if (myVerdict?.state === "APPROVED") return make("waiting", "You approved");
+
   // Approving counts as having seen every reply made before it.
   const myApproval =
     myReviews
