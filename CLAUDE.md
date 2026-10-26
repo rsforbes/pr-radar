@@ -60,3 +60,4 @@ Data flow: `App` polls -> `fetchRepos` (GitHub: one GraphQL query per repo, in p
 - Match the existing style: small modules, plain functions, no state library, no CSS framework (`App.css`).
 - Keep GitHub response shaping in `src/github/`, and decision logic in `src/state/`.
 - Don't add token handling or direct HTTP calls to GitHub without discussing it; the `gh` approach is deliberate.
+- Use Conventional Commit PR titles (`feat:`, `fix:`, `docs:`, ...): release-please builds the version and changelog from them. Don't bump versions by hand; see `docs/releasing.md`.

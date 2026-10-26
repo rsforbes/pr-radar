@@ -1,0 +1,18 @@
+name: PR title
+
+# release-please reads Conventional Commit messages. PRs are squash-merged with the PR title as
+# the commit message, so the title has to follow the format: feat: ..., fix: ..., docs: ..., etc.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
