@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { listAccounts, type GhAccount } from "./github/accounts";
-import { fetchAdoRepos } from "./ado/client";
-import { isAdo, fromAdoKey, repoLabel } from "./ado/repo";
-import { fetchRepos, type RepoResult } from "./github/client";
+import { fetchAll, parseAnyRepo, repoDisplay, type RepoResult } from "./providers";
 import type { Classified } from "./github/types";
 import { classify } from "./state/classify";
 import { setActionBadge } from "./badge";
 import { checkForUpdate, installUpdate } from "./update";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { isSnoozed, pruneSnoozed, snoozeUntil, timeLeft } from "./state/snooze";
-import { loadConfig, parseAnyRepo, saveConfig, type Config, type Tab } from "./store/config";
+import { loadConfig, saveConfig, type Config, type Tab } from "./store/config";
 import "./App.css";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -35,10 +33,14 @@ function ago(iso: string) {
   return `${Math.round(mins / 1440)}d ago`;
 }
 
+const labelOf = (key: string) => {
+  const { owner, name } = repoDisplay(key);
+  return owner ? `${owner}/${name}` : name;
+};
+
 /** Repo name with the owner dimmed so the repo itself stands out. */
 function RepoName({ repo }: { repo: string }) {
-  const ado = isAdo(repo) ? fromAdoKey(repo) : null;
-  const [owner, name] = ado ? [`${ado.org}/${ado.project}`, ado.repo] : repo.split("/");
+  const { owner, name } = repoDisplay(repo);
   return (
     <span className="repo-name">
       <span className="owner">{owner}/</span>
@@ -95,9 +97,11 @@ function groupByRepo(items: Classified[]): [string, Classified[]][] {
 
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null);
-  const [items, setItems] = useState<Classified[]>([]);
-  const [errors, setErrors] = useState<RepoResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Latest result per repo; repos land here one by one while a refresh is running.
+  const [results, setResults] = useState<Record<string, RepoResult>>({});
+  const [pending, setPending] = useState<string[]>([]);
+  const loading = pending.length > 0;
+  const runId = useRef(0);
   const [repoFilter, setRepoFilter] = useState("");
   const [newRepo, setNewRepo] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
@@ -122,28 +126,28 @@ export default function App() {
   }, []);
 
   const refresh = useCallback(async (repos: string[], account: string | null) => {
-    if (repos.length === 0) {
-      setItems([]);
-      setErrors([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [github, ado] = await Promise.all([
-        fetchRepos(repos.filter((r) => !isAdo(r)), account),
-        fetchAdoRepos(repos.filter(isAdo)),
-      ]);
-      const results = [...github, ...ado];
-      const classified = results
-        .flatMap((r) => r.prs.map((pr) => classify(pr, r.me)))
-        .filter((c): c is Classified => c !== null);
-      setItems(classified);
-      setErrors(results.filter((r) => r.error));
-      setUpdated(new Date());
-    } finally {
-      setLoading(false);
-    }
+    const run = ++runId.current;
+    // Drop repos that were removed; keep the rest on screen until their fresh result arrives.
+    setResults((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => repos.includes(k))));
+    setPending(repos);
+    if (repos.length === 0) return;
+    const onResult = (r: RepoResult) => {
+      if (run !== runId.current) return; // a newer refresh superseded this one
+      setResults((prev) => ({ ...prev, [r.repo]: r }));
+      setPending((prev) => prev.filter((k) => k !== r.repo));
+    };
+    await fetchAll(repos, account, onResult);
+    if (run === runId.current) setUpdated(new Date());
   }, []);
+
+  const items = useMemo(
+    () =>
+      Object.values(results)
+        .flatMap((r) => r.prs.map((pr) => classify(pr, r.me)))
+        .filter((c): c is Classified => c !== null),
+    [results],
+  );
+  const errors = useMemo(() => Object.values(results).filter((r) => r.error), [results]);
 
   const repoKey = config?.repos.join(",");
   useEffect(() => {
@@ -261,7 +265,7 @@ export default function App() {
             <option value="">All repos</option>
             {config.repos.map((r) => (
               <option key={r} value={r}>
-                {repoLabel(r)}
+                {labelOf(r)}
               </option>
             ))}
           </select>
@@ -281,7 +285,7 @@ export default function App() {
         </div>
         <div className="actions">
           <button onClick={() => refresh(config.repos, config.account)} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? `Refreshing… ${config.repos.length - pending.length}/${config.repos.length}` : "Refresh"}
           </button>
           <button onClick={() => setShowRepos((s) => !s)}>Repos ({config.repos.length})</button>
         </div>
@@ -328,7 +332,7 @@ export default function App() {
           <ul>
             {config.repos.map((r) => (
               <li key={r}>
-                {repoLabel(r)}
+                {labelOf(r)}
                 <button onClick={() => update({ ...config, repos: config.repos.filter((x) => x !== r) })}>
                   Remove
                 </button>
@@ -338,10 +342,15 @@ export default function App() {
         </section>
       )}
 
+      {loading && (
+        <p className="muted refreshing">
+          Refreshing {pending.map(labelOf).join(", ")}…
+        </p>
+      )}
       {config.repos.length === 0 && <p className="muted">No repos yet. Click “Repos” to add one.</p>}
       {errors.map((e) => (
         <p key={e.repo} className="error">
-          {repoLabel(e.repo)}: {e.error}
+          {labelOf(e.repo)}: {e.error}
         </p>
       ))}
 
@@ -359,7 +368,7 @@ export default function App() {
         ))}
       </nav>
 
-      {rows.length === 0 && config.repos.length > 0 && (
+      {rows.length === 0 && config.repos.length > 0 && !loading && (
         <p className="muted empty">{EMPTY[config.tab]}</p>
       )}
       <section className={`bucket ${config.tab}`}>
